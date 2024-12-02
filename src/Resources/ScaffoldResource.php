@@ -208,14 +208,64 @@ class ScaffoldResource extends Resource
 
     public static function getAllTableNames(): array
     {
-        $tables = DB::select('SHOW TABLES');
+        if(env("DB_CONNECTION") == "pgsql") {
+             $tables = DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
+        }
+        else {
+            $tables = DB::select('SHOW TABLES');
+        }  
 
         return array_map('current', $tables);
     }
 
     public static function getTableColumns($tableName)
     {
-        $columns = DB::select('SHOW COLUMNS FROM ' . $tableName);
+        if(env('DB_CONNECTION') == 'pgsql') {
+            $columns = DB::select("SELECT column_name, data_type, is_nullable, column_default, character_maximum_length FROM information_schema.columns WHERE table_name = '{$tableName}'");
+        $columnDetails = [];
+
+        $typeMapping = [
+            'character varying' => 'string',
+            'integer' => 'integer',
+            'bigint' => 'bigInteger',
+            'text' => 'text',
+            'real' => 'float',
+            'double precision' => 'double',
+            'numeric' => 'decimal',
+            'boolean' => 'boolean',
+            'date' => 'date',
+            'time without time zone' => 'time',
+            'timestamp without time zone' => 'dateTime',
+            'character' => 'char',
+            'json' => 'json',
+            'jsonb' => 'jsonb',
+            'bytea' => 'binary',
+            'inet' => 'ipAddress',
+            'macaddr' => 'macAddress',
+        ];
+
+        foreach ($columns as $column) {
+            if ($column->column_name === 'id' || $column->column_name === 'created_at' || $column->column_name === 'updated_at' || $column->column_name === 'deleted_at') {
+                continue;
+            }
+
+            $type = $column->data_type;
+            $key = ''; // PostgreSQL does not provide key information in this query
+
+            $translatedType = $typeMapping[$type] ?? $type;
+
+            $columnDetails[] = [
+                'name' => $column->column_name,
+                'type' => $translatedType,
+                'nullable' => $column->is_nullable === 'YES',
+                'key' => $key,
+                'default' => $column->column_default,
+                'comment' => '',
+            ];
+        }
+
+        } else {
+            $columns = DB::select('SHOW COLUMNS FROM ' . $tableName);
         $columnDetails = [];
 
         $typeMapping = [
@@ -273,6 +323,8 @@ class ScaffoldResource extends Resource
                 'comment' => '',
             ];
         }
+        }
+        
 
         return $columnDetails;
     }
